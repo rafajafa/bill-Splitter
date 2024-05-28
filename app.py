@@ -1,6 +1,6 @@
 from flask import Flask, render_template, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import InputRequired, Length, Email, ValidationError
@@ -20,17 +20,51 @@ def load_user(user_id):
     # return User.query.get(int(user_id))
     return db.session.get(User, int(user_id))
 
+# Define the association table
+group_user = db.Table('group_user',
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
+    db.Column('group_id', db.Integer, db.ForeignKey('group.id'), primary_key=True)
+)
+
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(100), nullable=False)
+    
+    # group = db.relationship('Group', backref=db.backref('user', lazy=True))
+    group = db.relationship('Group', secondary=group_user, backref = db.backref('users', lazy=True))
 
     def __repr__(self):
         return '<User %r>' % self.username
 
     def set_password(self, new_password):
         self.password = new_password
+    
+
+class Group(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    
+    members = db.relationship('User', secondary='group_user', backref=db.backref('groups', lazy=True))
+    # bills = db.relationship('Bill', backref=db.backref('group', lazy=True))
+
+    def __repr__(self):
+        return '<Group %r>' % self.name
+    
+    def add_member(self, user):
+        self.members.append(user)
+    
+class Bill(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    description = db.Column(db.String(100), nullable=False)
+    total = db.Column(db.Float, nullable=False)
+    paid_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    participants = db.relationship('User', backref=db.backref('bills', lazy=True))
+    group_id = db.Column(db.Integer, db.ForeignKey('group.id'), nullable=False)
+    
+    def __repr__(self):
+        return '<Bill %r>' % self.description
 
 class RegisterForm(FlaskForm):
     username = StringField(validators=[InputRequired(), Length(min=2, max=20)], render_kw={"placeholder": "Username"})
@@ -55,19 +89,18 @@ class LoginForm(FlaskForm):
     
     submit = SubmitField('Login')
 
-# class Group(db.Model):
-#     id = db.Column(db.Integer, primary_key=True)
-#     name = db.Column(db.String(100), unique=True, nullable=False)
-#     members = db.relationship('User', backref=db.backref('groups', lazy=True))
 
-#     def __repr__(self):
-#         return '<Group %r>' % self.name
+class GroupForm(FlaskForm):
+    name = StringField(validators=[InputRequired(), Length(min=2, max=100)], render_kw={"placeholder": "Name"})
+    submit = SubmitField('Create Group')
 
 class BillForm(FlaskForm):
     description = StringField(validators=[InputRequired(), Length(min=2, max=100)], render_kw={"placeholder": "Description"})
     total = StringField(validators=[InputRequired()], render_kw={"placeholder": "Total"})
     paid_by_username = StringField(validators=[InputRequired()], render_kw={"placeholder": "Paid by"})
     participants = StringField(validators=[InputRequired()], render_kw={"placeholder": "Participants"})
+    
+    group = StringField(validators=[InputRequired()], render_kw={"placeholder": "Group"})
     
     submit = SubmitField('Add Bill')
 
@@ -81,6 +114,11 @@ class BillForm(FlaskForm):
             user = User.query.get(user_id)
             if not user:
                 raise ValidationError(f'User with id {user_id} does not exist')
+
+    def validate_group(self, group):
+        group = Group.query.filter_by(name=group.data).first()
+        if not group:
+            raise ValidationError('Group does not exist')
 
 @app.route('/')
 def index():
@@ -118,7 +156,8 @@ def login():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    return render_template('dashboard.html')
+    user_groups = current_user.groups
+    return render_template('dashboard.html', groups=user_groups)
 
 @app.route('/logout')
 @login_required
@@ -126,17 +165,51 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-@app.route('/bill')
-@login_required
-def bill():
-    form = BillForm()
-    id = db.Column(db.Integer, primary_key=True)
-    description = db.Column(db.String(100), nullable=False)
-    total = db.Column(db.Float, nullable=False)
-    paid_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    participants = db.relationship('User', backref=db.backref('bills', lazy=True))
+# @app.route('/bill')
+# @login_required
+# def bill():
+#     form = BillForm()
+#     # id = db.Column(db.Integer, primary_key=True)
+#     # description = db.Column(db.String(100), nullable=False)
+#     # total = db.Column(db.Float, nullable=False)
+#     # paid_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+#     # participants = db.relationship('User', backref=db.backref('bills', lazy=True))
     
-    return render_template('bill.html')
+#     return render_template('bill.html', form = form)
+
+@app.route('/create_group', methods=['GET', 'POST'])
+@login_required
+def create_group():
+    form = GroupForm()
+    if form.validate_on_submit():
+        # create a new group
+        new_group = Group(name=form.name.data)
+        db.session.add(new_group)
+        db.session.commit()
+        
+        # add the current user to the group
+        new_group.add_member(current_user)
+        db.session.commit()
+        # add the group to the current user
+        current_user.groups.append(new_group)
+        return redirect(url_for('dashboard'))
+    
+    return render_template('create_group.html', form=form)
+
+@app.route('/add_bill', methods=['GET', 'POST'])
+@login_required
+def add_bill():
+    form = BillForm()
+    if form.validate_on_submit():
+        new_bill = Bill(description=form.description.data, 
+                        total = form.total.data, 
+                        paid = form.paid_by_username.data,
+                        participants = form.participants.data,
+                        group = form.group.data)
+        db.session.add(new_bill)
+        db.session.commit()
+        return redirect(url_for('dashboard'))
+    return render_template('add_bill.html', form=form)
 
 with app.app_context():
     db.create_all()

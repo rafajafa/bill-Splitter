@@ -11,6 +11,20 @@
 <body>
     <h1>Hello you are now logged in.</h1>
     <a href="{{url_for('logout')}}">Press here to logout</a>
+    <h2>Your Groups:</h2>
+    <ul>
+        {% for group in groups %}
+            <li>{{ group.name }}
+                <ul>
+                    {% for bill in group.bills %}
+                        <li>{{ bill.description }} - {{ bill.total }} paid by {{ bill.paid_by_user.username }}</li>
+                    {% endfor %}
+                </ul>
+            </li>
+        {% endfor %}
+    </ul>
+    <a href="{{ url_for('create_group') }}">Create Group</a>
+    <a href="{{ url_for('add_bill') }}">Add Bill</a>
 </body>
 
 </html>
