@@ -14,7 +14,9 @@
     <h2>Your Groups:</h2>
     <ul>
         {% for group in groups %}
-            <li>{{ group.name }}
+            <li>
+                {{ group.name }} 
+                <a href="{{ url_for('group_detail', group_id=group.id) }}">{{ group.name }}</a>
                 <ul>
                     {% for bill in group.bills %}
                         <li>{{ bill.description }} - {{ bill.total }} paid by {{ bill.paid_by_user.username }}</li>
@@ -23,8 +25,8 @@
             </li>
         {% endfor %}
     </ul>
-    <a href="{{ url_for('create_group') }}">Create Group</a>
-    <a href="{{ url_for('add_bill') }}">Add Bill</a>
+    <a href="{{ url_for('create_group') }}">Create Group</a><br>
+    <a href="{{ url_for('join_group') }}">join_group</a>
 </body>
 
 </html>

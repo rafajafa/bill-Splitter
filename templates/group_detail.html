@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Group Details</title>
+</head>
+
+<body>
+    <h1>{{ group.name }}</h1>
+    <h2>Members:</h2>
+    <ul>
+        {% for user in group.members %}
+            <li>{{ user.username }} ({{ user.email }})</li>
+        {% endfor %}
+    </ul>
+    <h2>Bills:</h2>
+    <ul>
+        {% for bill in group.bills %}
+            <li>{{ bill.description }} - {{ bill.total }} paid by {{ bill.paid_by_user.username }}</li>
+        {% endfor %}
+    </ul>
+    <a href="{{ url_for('add_bill', group_id=group.id) }}">Add Bill</a><br>
+    <a href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+</body>
+
+</html>

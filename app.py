@@ -60,8 +60,9 @@ class Bill(db.Model):
     description = db.Column(db.String(100), nullable=False)
     total = db.Column(db.Float, nullable=False)
     paid_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    participants = db.relationship('User', backref=db.backref('bills', lazy=True))
     group_id = db.Column(db.Integer, db.ForeignKey('group.id'), nullable=False)
+    
+    # participants = db.relationship('User', secondary='bill_user', backref=db.backref('bills', lazy=True))
     
     def __repr__(self):
         return '<Bill %r>' % self.description
@@ -89,10 +90,13 @@ class LoginForm(FlaskForm):
     
     submit = SubmitField('Login')
 
-
 class GroupForm(FlaskForm):
     name = StringField(validators=[InputRequired(), Length(min=2, max=100)], render_kw={"placeholder": "Name"})
     submit = SubmitField('Create Group')
+    
+class JoinGroupForm(FlaskForm):
+    group_name = StringField(validators=[InputRequired(), Length(min=2, max=100)], render_kw={"placeholder": "Group Name"})
+    submit = SubmitField('Join Group')
 
 class BillForm(FlaskForm):
     description = StringField(validators=[InputRequired(), Length(min=2, max=100)], render_kw={"placeholder": "Description"})
@@ -165,18 +169,6 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-# @app.route('/bill')
-# @login_required
-# def bill():
-#     form = BillForm()
-#     # id = db.Column(db.Integer, primary_key=True)
-#     # description = db.Column(db.String(100), nullable=False)
-#     # total = db.Column(db.Float, nullable=False)
-#     # paid_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-#     # participants = db.relationship('User', backref=db.backref('bills', lazy=True))
-    
-#     return render_template('bill.html', form = form)
-
 @app.route('/create_group', methods=['GET', 'POST'])
 @login_required
 def create_group():
@@ -210,6 +202,18 @@ def add_bill():
         db.session.commit()
         return redirect(url_for('dashboard'))
     return render_template('add_bill.html', form=form)
+
+@app.route('/join_group')
+@login_required
+def join_group():
+    form = JoinGroupForm()
+    return render_template('join_group.html', form=form)
+
+@app.route('/group/<int:group_id>')
+@login_required
+def group_detail(group_id):
+    group = Group.query.get(group_id)
+    return render_template('group_detail.html', group=group)
 
 with app.app_context():
     db.create_all()
