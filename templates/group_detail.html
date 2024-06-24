@@ -19,9 +19,17 @@
     <h2>Bills:</h2>
     <ul>
         {% for bill in group.bills %}
-            <li>{{ bill.description }} - {{ bill.total }} paid by {{ bill.paid_by_user.username }}</li>
+            <li>{{ bill.description }} - {{ bill.total }} paid by user {{ bill.paid_by_user_id }}</li>
         {% endfor %}
     </ul>
+    <h2>Owed Amounts</h2>
+    <ul>
+        {% for item in amounts_owed_list %}
+            <li class="list-group-item">{{ item.username }} owes {{ item.amount | round(2) }} to you</li>
+        {% endfor %}
+    </ul>
+
+    <br>
     <a href="{{ url_for('add_bill', group_id=group.id) }}">Add Bill</a><br>
     <a href="{{ url_for('dashboard') }}">Back to Dashboard</a>
 </body>

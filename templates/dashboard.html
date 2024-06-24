@@ -19,7 +19,7 @@
                 <a href="{{ url_for('group_detail', group_id=group.id) }}">{{ group.name }}</a>
                 <ul>
                     {% for bill in group.bills %}
-                        <li>{{ bill.description }} - {{ bill.total }} paid by {{ bill.paid_by_user.username }}</li>
+                        <li>{{ bill.description }} - {{ bill.total }} paid by user {{ bill.paid_by_user_id }}</li>
                     {% endfor %}
                 </ul>
             </li>

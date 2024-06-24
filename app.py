@@ -2,7 +2,7 @@ from flask import Flask, render_template, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, SelectMultipleField
+from wtforms import StringField, PasswordField, SubmitField, SelectMultipleField, widgets, FloatField, SelectField
 from wtforms.validators import InputRequired, Length, Email, ValidationError
 
 app = Flask(__name__)
@@ -102,15 +102,19 @@ class JoinGroupForm(FlaskForm):
     group_name = StringField(validators=[InputRequired(), Length(min=2, max=100)], render_kw={"placeholder": "Group Name"})
     submit = SubmitField('Join Group')
 
+class MultiCheckboxField(SelectMultipleField):
+    widget = widgets.ListWidget(prefix_label=False)
+    option_widget = widgets.CheckboxInput()
+
+
 class BillForm(FlaskForm):
     description = StringField(validators=[InputRequired(), Length(min=2, max=100)], render_kw={"placeholder": "Description"})
-    total = StringField(validators=[InputRequired()], render_kw={"placeholder": "Total"})
-    paid_by_username = StringField(validators=[InputRequired()], render_kw={"placeholder": "Paid by"})
+    total = FloatField(validators=[InputRequired()], render_kw={"placeholder": "Total"})
+    # paid_by_username = StringField(validators=[InputRequired()], render_kw={"placeholder": "Paid by"})
+    paid_by_username = SelectField(validators=[InputRequired()], render_kw={"placeholder": "Paid by"}, coerce=int)
+    participants = MultiCheckboxField(validators=[InputRequired()], render_kw={"placeholder": "Participants"}, coerce=int)
     
-    # participants = StringField(validators=[InputRequired()], render_kw={"placeholder": "Participants"})
-    participants = SelectMultipleField(validators=[InputRequired()], render_kw={"placeholder": "Participants"})
-    
-    group = StringField(validators=[InputRequired()], render_kw={"placeholder": "Group"})
+    group = StringField(render_kw={"placeholder": "Group"})
     
     submit = SubmitField('Add Bill')
 
@@ -119,16 +123,33 @@ class BillForm(FlaskForm):
         if not user:
             raise ValidationError('User does not exist')
     
-    def validate_participants(self, participants):
-        for user_id in participants.data.split(','):
-            user = User.query.get(user_id)
-            if not user:
-                raise ValidationError(f'User with id {user_id} does not exist')
+    # def validate_participants(self, participants):
+    #     for user_id in participants.data.split(','):
+    #         user = User.query.get(user_id)
+    #         if not user:
+    #             raise ValidationError(f'User with id {user_id} does not exist')
 
-    def validate_group(self, group):
-        group = Group.query.filter_by(name=group.data).first()
-        if not group:
-            raise ValidationError('Group does not exist')
+    # def validate_group(self, group):
+    #     group = Group.query.filter_by(name=group.data).first()
+    #     if not group:
+    #         raise ValidationError('Group does not exist')
+
+# calculate the amount each user in the group owed the user in the group
+def cal_owned_amount(group_id, user_id):
+    bills = Bill.query.filter_by(group_id=group_id).all()
+    amount_owed = {}
+    for bill in bills:
+        # split equally among participants
+        amount_pp = bill.total / len(bill.participants)
+        
+        participants = bill.participants
+        for participant in participants:
+            if participant.id != user_id:
+                if participant.id not in amount_owed:
+                    amount_owed[participant.id] = 0
+                amount_owed[participant.id] += amount_pp
+    
+    return amount_owed
 
 @app.route('/')
 def index():
@@ -198,17 +219,33 @@ def create_group():
 @login_required
 def add_bill(group_id):
     form = BillForm()
+    
+    group = Group.query.get(group_id)
+    if not group:
+        return redirect(url_for('dashboard'))
+
+    form.paid_by_username.choices = [(member.id, member.username) for member in group.members]
+    
+    form.participants.choices = [(member.id, member.username) for member in group.members]
+        
     if form.validate_on_submit():
         new_bill = Bill(description=form.description.data, 
                         total = form.total.data, 
-                        paid = form.paid_by_username.data,
-                        group = group_id)
+                        paid_by_user_id = User.query.filter_by(username=form.paid_by_username.data).first().id,
+                        group = group)
+        
+        for participant_username in form.participants.data:
+            participant = User.query.get(participant_username)
+            if participant:
+                new_bill.participants.append(participant)
         db.session.add(new_bill)
         db.session.commit()
         
-        participants = User.query.filter
+        print("new bill added to db")
         
         return redirect(url_for('dashboard'))
+    else:
+        print(form.errors)
     return render_template('add_bill.html', form=form)
 
 @app.route('/join_group', methods = ['GET', 'POST'])
@@ -228,7 +265,16 @@ def join_group():
 @login_required
 def group_detail(group_id):
     group = Group.query.get(group_id)
-    return render_template('group_detail.html', group=group)
+    
+    owed_amounts = cal_owned_amount(group_id, current_user.id)
+    print("owed_amounts")
+    print(owed_amounts)
+    amounts_owed_list = []
+    for participant_id, amount in owed_amounts.items():
+        participant = User.query.get(participant_id)
+        amounts_owed_list.append({'username': participant.username, 'amount': amount})
+    
+    return render_template('group_detail.html', group=group, amounts_owed_list = amounts_owed_list)
 
 with app.app_context():
     db.create_all()
